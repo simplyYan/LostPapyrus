@@ -1,5 +1,3 @@
-### README for LostPapyrus
-
 # LostPapyrus
 
 LostPapyrus is a minimalist and fast web framework for Go (Golang), inspired by Fiber. It aims to be easy to use, fast, and feature-rich, providing a broad range of functionalities for building web applications.

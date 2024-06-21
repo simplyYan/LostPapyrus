@@ -1,59 +1,56 @@
 package lostpapyrus
 
 import (
-	"fmt"
-	"net/http"
-	"html/template"
+    "net/http"
 )
 
-type LostPapyrus struct {}
-
-func (lib *LostPapyrus) Get(returntype string, returnitem string, route string) {
-	http.HandleFunc(route, func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodGet {
-			if returntype == "html" {
-				t, err := template.New("response").Parse(returnitem)
-				if err != nil {
-					http.Error(w, "Error parsing template", http.StatusInternalServerError)
-					return
-				}
-				if err := t.Execute(w, nil); err != nil {
-					http.Error(w, "Error executing template", http.StatusInternalServerError)
-				}
-			} else if returntype == "text" {
-				fmt.Fprintf(w, returnitem)
-			} else {
-				http.Error(w, "The return type doesn't match any available on LostPapyrus. You must use 'text' or 'html' as arguments, but you used '"+returntype+"'", http.StatusBadRequest)
-			}
-		} else {
-			http.Error(w, "LostPapyrus 627: The method used in the request is not allowed.", http.StatusMethodNotAllowed)
-		}
-	})
+type App struct {
+    Router      *Router
+    middlewares []HandlerFunc
 }
 
-func (lib *LostPapyrus) Post(returntype string, returnitem string, route string) {
-	http.HandleFunc(route, func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost {
-			if returntype == "html" {
-				t, err := template.New("response").Parse(returnitem)
-				if err != nil {
-					http.Error(w, "Error parsing template", http.StatusInternalServerError)
-					return
-				}
-				if err := t.Execute(w, nil); err != nil {
-					http.Error(w, "Error executing template", http.StatusInternalServerError)
-				}
-			} else if returntype == "text" {
-				fmt.Fprintf(w, returnitem)
-			} else {
-				http.Error(w, "The return type doesn't match any available on LostPapyrus. You must use 'text' or 'html' as arguments, but you used '"+returntype+"'", http.StatusBadRequest)
-			}
-		} else {
-			http.Error(w, "LostPapyrus 627: The method used in the request is not allowed.", http.StatusMethodNotAllowed)
-		}
-	})
+func New() *App {
+    return &App{Router: NewRouter()}
 }
 
-func New() *LostPapyrus {
-	return &LostPapyrus{}
+func (app *App) Use(middleware HandlerFunc) {
+    app.middlewares = append(app.middlewares, middleware)
+}
+
+func (app *App) Get(path string, handler HandlerFunc) {
+    app.Router.Handle("GET", path, handler)
+}
+
+func (app *App) Post(path string, handler HandlerFunc) {
+    app.Router.Handle("POST", path, handler)
+}
+
+func (app *App) Listen(addr string) {
+    http.ListenAndServe(addr, app)
+}
+
+func (app *App) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+    ctx := &Context{
+        ResponseWriter: w,
+        Request:        req,
+        Params:         make(map[string]string),
+    }
+
+    var next HandlerFunc
+    next = func(c *Context, _ HandlerFunc) {
+        app.Router.ServeHTTP(w, req)
+    }
+
+    for i := len(app.middlewares) - 1; i >= 0; i-- {
+        current := app.middlewares[i]
+        next = createNext(current, next)
+    }
+
+    next(ctx, nil)
+}
+
+func createNext(current, next HandlerFunc) HandlerFunc {
+    return func(ctx *Context, _ HandlerFunc) {
+        current(ctx, next)
+    }
 }
